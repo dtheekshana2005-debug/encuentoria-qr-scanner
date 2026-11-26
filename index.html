@@ -286,7 +286,12 @@
           guestInfo.classList.remove("hidden");
 
           if (result.alreadyCheckedIn) {
-            showStatus("ALREADY CHECKED IN");
+  showStatus("🔴 ALREADY CHECKED IN — THIS TICKET WAS ALREADY USED");
+  document.getElementById("status").style.background = "#dc2626";
+  document.getElementById("status").style.color = "#ffffff";
+  document.getElementById("status").style.padding = "15px";
+  document.getElementById("status").style.borderRadius = "10px";
+  document.getElementById("status").style.fontWeight = "bold";
 
             checkinBtn.classList.add("hidden");
             nextBtn.classList.remove("hidden");
