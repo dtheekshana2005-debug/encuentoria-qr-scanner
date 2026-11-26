@@ -1,0 +1,341 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>ENCUENTORIA 2.0 QR Check-in</title>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #160d2e;
+      color: white;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 450px;
+      margin: auto;
+    }
+
+    h1 {
+      color: #f5d778;
+      font-size: 27px;
+    }
+
+    .subtitle {
+      color: #d7c9f5;
+      margin-bottom: 25px;
+    }
+
+    #reader {
+      background: white;
+      border-radius: 15px;
+      padding: 10px;
+      overflow: hidden;
+    }
+
+    .status {
+      background: #2a1b4b;
+      padding: 16px;
+      border-radius: 12px;
+      margin-top: 18px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .guest-name {
+      color: #f5d778;
+      font-size: 24px;
+      font-weight: bold;
+      margin: 12px 0;
+    }
+
+    .ticket-id {
+      color: #d7c9f5;
+      font-size: 13px;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      margin-top: 15px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .start-btn {
+      background: #e5c15b;
+      color: #160d2e;
+    }
+
+    .checkin-btn {
+      background: #e5c15b;
+      color: #160d2e;
+    }
+
+    .next-btn {
+      background: #6d45a8;
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .footer {
+      color: #a99ac8;
+      font-size: 12px;
+      margin-top: 25px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+
+    <h1>ENCUENTORIA 2.0</h1>
+
+    <div class="subtitle">
+      Official Event QR Check-in
+    </div>
+
+    <div id="reader"></div>
+
+    <button id="startBtn"
+            class="start-btn"
+            onclick="startScanner()">
+      START CAMERA
+    </button>
+
+    <div id="status" class="status">
+      Press START CAMERA to begin.
+    </div>
+
+    <div id="guestInfo" class="status hidden">
+
+      <div id="guestName" class="guest-name"></div>
+
+      <div id="ticketId" class="ticket-id"></div>
+
+      <button id="checkinBtn"
+              class="checkin-btn"
+              onclick="confirmCheckIn()">
+        CONFIRM CHECK-IN
+      </button>
+
+    </div>
+
+    <button id="nextBtn"
+            class="next-btn hidden"
+            onclick="scanNext()">
+      SCAN NEXT TICKET
+    </button>
+
+    <div class="footer">
+      ENCUENTORIA 2.0 | Event Management
+    </div>
+
+  </div>
+
+  <script>
+    const API_URL =
+      "https://script.google.com/macros/s/AKfycbzTu-VFeOHr6yoTBqgBlk2CEyPypLV1ySe5Du43dhebjhfpUDcmI30-hS9RpG7XiH9p/exec";
+
+    let scanner = null;
+    let currentTicketId = "";
+    let cameraRunning = false;
+    let processing = false;
+
+    const statusBox = document.getElementById("status");
+    const guestInfo = document.getElementById("guestInfo");
+    const guestName = document.getElementById("guestName");
+    const ticketIdBox = document.getElementById("ticketId");
+    const checkinBtn = document.getElementById("checkinBtn");
+    const startBtn = document.getElementById("startBtn");
+    const nextBtn = document.getElementById("nextBtn");
+
+    function showStatus(message) {
+      statusBox.textContent = message;
+      statusBox.classList.remove("hidden");
+    }
+
+    function callApi(action, ticketId, callback) {
+      const callbackName =
+        "encuCallback_" + Date.now() + "_" +
+        Math.floor(Math.random() * 100000);
+
+      const script = document.createElement("script");
+
+      window[callbackName] = function(result) {
+        delete window[callbackName];
+        script.remove();
+        callback(result);
+      };
+
+      script.onerror = function() {
+        delete window[callbackName];
+        script.remove();
+        showStatus("Could not connect to ticket server.");
+        nextBtn.classList.remove("hidden");
+      };
+
+      const url =
+        API_URL +
+        "?api=" + encodeURIComponent(action) +
+        "&ticketId=" + encodeURIComponent(ticketId) +
+        "&callback=" + encodeURIComponent(callbackName);
+
+      script.src = url;
+
+      document.body.appendChild(script);
+    }
+
+    function startScanner() {
+      if (cameraRunning) return;
+
+      processing = false;
+      currentTicketId = "";
+
+      guestInfo.classList.add("hidden");
+      nextBtn.classList.add("hidden");
+      startBtn.disabled = true;
+
+      showStatus("Starting camera...");
+
+      scanner = new Html5Qrcode("reader");
+
+      scanner.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: {
+            width: 250,
+            height: 250
+          }
+        },
+        onScanSuccess,
+        function() {}
+      ).then(function() {
+        cameraRunning = true;
+        startBtn.classList.add("hidden");
+        showStatus("Camera ready. Scan a ticket QR.");
+      }).catch(function(error) {
+        startBtn.disabled = false;
+
+        showStatus(
+          "Camera could not start. Check browser permission and try again."
+        );
+      });
+    }
+
+    function stopScanner() {
+      if (scanner && cameraRunning) {
+        return scanner.stop().then(function() {
+          cameraRunning = false;
+        }).catch(function() {
+          cameraRunning = false;
+        });
+      }
+
+      return Promise.resolve();
+    }
+
+    function onScanSuccess(decodedText) {
+      if (processing) return;
+
+      processing = true;
+      currentTicketId = decodedText.trim();
+
+      stopScanner().then(function() {
+        showStatus("Checking ticket...");
+
+        callApi("lookup", currentTicketId, function(result) {
+          if (!result || !result.success) {
+            showStatus(
+              result && result.message
+                ? result.message
+                : "Invalid ticket."
+            );
+
+            nextBtn.classList.remove("hidden");
+            return;
+          }
+
+          guestName.textContent = result.guestName;
+          ticketIdBox.textContent = result.ticketId;
+
+          guestInfo.classList.remove("hidden");
+
+          if (result.alreadyCheckedIn) {
+            showStatus("ALREADY CHECKED IN");
+
+            checkinBtn.classList.add("hidden");
+            nextBtn.classList.remove("hidden");
+          } else {
+            showStatus("Valid ticket. Confirm check-in.");
+            checkinBtn.classList.remove("hidden");
+          }
+        });
+      });
+    }
+
+    function confirmCheckIn() {
+      if (!currentTicketId) return;
+
+      checkinBtn.disabled = true;
+      checkinBtn.textContent = "PROCESSING...";
+
+      callApi("checkin", currentTicketId, function(result) {
+        if (result && result.success) {
+          showStatus("CHECK-IN SUCCESSFUL");
+
+          checkinBtn.classList.add("hidden");
+          nextBtn.classList.remove("hidden");
+        } else {
+          showStatus(
+            result && result.message
+              ? result.message
+              : "Check-in failed."
+          );
+
+          checkinBtn.disabled = false;
+          checkinBtn.textContent = "CONFIRM CHECK-IN";
+        }
+      });
+    }
+
+    function scanNext() {
+      guestInfo.classList.add("hidden");
+      nextBtn.classList.add("hidden");
+
+      startBtn.classList.remove("hidden");
+      startBtn.disabled = false;
+
+      showStatus("Press START CAMERA to scan next ticket.");
+
+      processing = false;
+      currentTicketId = "";
+    }
+  </script>
+
+</body>
+</html>
